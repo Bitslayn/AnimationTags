@@ -9,6 +9,14 @@ Github: https://github.com/Bitslayn/AnimationTags
 Wiki: https://github.com/Bitslayn/AnimationTags/wiki
 --]]
 
+for _, v in pairs(listFiles(nil, true)) do
+  if v:find("GSAnimBlend") then
+    require(v)
+  end
+end
+
+local debug = nil
+
 --#REGION ˚♡ Inject ♡˚
 
 ---@class AnimationAPI
@@ -38,10 +46,10 @@ local function reflect(tbl)
   return t
 end
 
----@type table<Animation, string[]>
+---@type {[Animation]: string[]}
 local trackedAnimations = {}
 
----@type table<string, Animation[]|AnimationTag>
+---@type {[string]: Animation[]|AnimationTag}
 local AnimationTags = {}
 ---@class AnimationTag
 ---@field play fun(): self Starts or resumes all animations with this tag
@@ -66,41 +74,42 @@ function AnimationTag:getPlaying()
   return reflect(getmetatable(self).playing)
 end
 
----@param meta AnimationTag.Meta
+---@param tag string
 ---@param anim Animation
 ---@param inc number
-local function query(meta, anim, inc)
-  meta.playing[anim] = inc == 1 and true or nil
+local function query(tag, anim, inc)
+  local meta = getmetatable(AnimationTags[tag])
+  local new = inc == 1 and true or nil
+  if meta.playing[anim] == new then return end
+  meta.playing[anim] = new
   meta.count = meta.count + inc
   meta.isPlaying = meta.count > 0
-  assert(meta.count >= 0, "INTERNAL LOGIC ERROR\nReport this to FOX")
+  if debug and anim:getName() == debug then
+    print(tag, meta.count)
+  end
 end
 
 ---Incriments each tag in the table by the given amount
 ---@param anim Animation
 ---@param inc number
 ---@param tag? string
-function _ENVMT.queryAC(anim, inc, tag)
+function _ENVMT.queryAT(anim, inc, tag)
   if tag then
-    local meta = getmetatable(AnimationTags[tag])
-    query(meta, anim, inc)
+    query(tag, anim, inc)
   else
     if not trackedAnimations[anim] then return end
     for _, v in pairs(trackedAnimations[anim]) do
-      local meta = getmetatable(AnimationTags[v])
-      query(meta, anim, inc)
+      query(v, anim, inc)
     end
   end
   anim:code(
     anim:getLength() - 0.01,
-    anim:getLoop() ~= "LOOP" and "getmetatable(_ENV).queryAC(..., -1)" or ""
+    anim:getLoop() == "ONCE" and "getmetatable(_ENV).queryAT(..., -1)" or ""
   )
 end
 
----Returns all animation tags, and a boolean if an animation with that tag is currently playing
----
----This function returns a reference to the internal table, which updates dynamically
----@return table<string, Animation[]|AnimationTag>
+---Returns all animation tags
+---@return {[string]: Animation[]|AnimationTag}
 function AnimationAPI:getTags()
   return AnimationTags
 end
@@ -123,16 +132,16 @@ function Animation:addTags(...)
 
     ---@class AnimationTag.Meta
     ---@field __index AnimationTag Stores all AnimationTag methods
-    ---@field playing table<Animation, true> Stores animations currently playing
+    ---@field playing {[Animation]: true} Stores animations currently playing
     ---@field isPlaying boolean If there's an animation with this tag currently playing
     ---@field count number The number of playing animations
-    ---@field index table<Animation, Animation> Stores all animations associated with this tag
+    ---@field index {[Animation]: Animation} Stores all animations associated with this tag
     local meta = { __index = AnimationTag, playing = {}, isPlaying = false, count = 0, index = {} }
     AnimationTags[v] = AnimationTags[v] or setmetatable({}, meta)
     meta.index[self] = self
 
     if self:isPlaying() then
-      _ENVMT.queryAC(self, 1, v)
+      _ENVMT.queryAT(self, 1, v)
     end
 
     table.insert(AnimationTags[v], self)
@@ -147,7 +156,7 @@ end
 function Animation:removeTags(...)
   for _, v in pairs({ ... }) do
     if self:isPlaying() then
-      _ENVMT.queryAC(self, -1, v)
+      _ENVMT.queryAT(self, -1, v)
     end
 
     trackedAnimations[self][v] = nil
@@ -170,9 +179,13 @@ for _, v in pairs({ "play", "playing", "setPlaying", "pause", "stop", "restart" 
     ani_i(self, v)(self, ...)
     local isPlaying = self:isPlaying()
 
-    if wasPlaying == isPlaying then return self end -- Return early if play state didn't change
+    if debug and self:getName() == debug then
+      print(v, ..., wasPlaying ~= isPlaying)
+    end
 
-    _ENVMT.queryAC(self, isPlaying and 1 or -1)
+    if wasPlaying == isPlaying then return self end
+
+    _ENVMT.queryAT(self, isPlaying and 1 or -1)
     return self
   end
   ---@param self AnimationTag
