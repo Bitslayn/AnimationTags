@@ -4,6 +4,9 @@ ____  ___ __   __
 | _|| (_) |> w <
 |_|  \___//_/ \_\
 FOX's Animation Tags API v1.0.0-rc1
+
+Github: https://github.com/Bitslayn/AnimationTags
+Wiki: https://github.com/Bitslayn/AnimationTags/wiki
 --]]
 
 --#REGION ˚♡ Inject ♡˚
