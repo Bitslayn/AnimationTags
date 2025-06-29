@@ -3,7 +3,7 @@ ____  ___ __   __
 | __|/ _ \\ \ / /
 | _|| (_) |> w <
 |_|  \___//_/ \_\
-FOX's Animation Tags API v1.0.0-rc1
+FOX's Animation Tags API v1.0.0-rc2
 
 Github: https://github.com/Bitslayn/AnimationTags
 Wiki: https://github.com/Bitslayn/AnimationTags/wiki
@@ -65,17 +65,26 @@ function AnimationTag:getPlaying()
   return reflect(getmetatable(self).playing)
 end
 
+local function query(tag, inc)
+  local meta = getmetatable(AnimationTags[tag])
+  meta.playing[tag] = inc == 1 and true or nil
+  meta.count = meta.count + inc
+  meta.isPlaying = meta.count > 0
+  assert(meta.count >= 0, "INTERNAL LOGIC ERROR\nReport this to FOX")
+end
+
 ---Incriments each tag in the table by the given amount
 ---@param anim Animation
 ---@param inc number
-function _ENVMT.queryAC(anim, inc)
-  if not trackedAnimations[anim] then return end
-  for _, v in pairs(trackedAnimations[anim]) do
-    local meta = getmetatable(AnimationTags[v])
-    meta.playing[anim] = inc == 1 and true or nil
-    meta.count = meta.count + inc
-    meta.isPlaying = meta.count > 0
-    assert(meta.count >= 0, "INTERNAL LOGIC ERROR\nReport this to FOX")
+---@param tag? string
+function _ENVMT.queryAC(anim, inc, tag)
+  if tag then
+    query(tag, inc)
+  else
+    if not trackedAnimations[anim] then return end
+    for _, v in pairs(trackedAnimations[anim]) do
+      query(v, inc)
+    end
   end
   anim:code(
     anim:getLength() - 0.01,
@@ -91,39 +100,51 @@ function AnimationAPI:getTags()
   return AnimationTags
 end
 
----Sets this animation's tags, which can be used to determine which tags have an animation playing
+---Returns a table listing this animation's tags
+---@return string[]
+function Animation:getTags()
+  return reflect(trackedAnimations[self] or {})
+end
+
+---Adds tags to this animation, which can be used to determine which tags have an animation playing
 ---
 ---Any single animation can be assigned to several tags
----@param self Animation
 ---@param ... string
 ---@return self
-function Animation:setTags(...)
-  -- Remove from previous tags
+function Animation:addTags(...)
+  for _, v in pairs({ ... }) do
+    trackedAnimations[self] = trackedAnimations[self] or {}
+    trackedAnimations[self][v] = v
 
-  if trackedAnimations[self] then
+    local meta = { __index = AnimationTag, playing = {}, isPlaying = false, count = 0, index = {} }
+    AnimationTags[v] = AnimationTags[v] or setmetatable({}, meta)
+    meta.index[self] = self
+
     if self:isPlaying() then
-      _ENVMT.queryAC(self, -1)
+      _ENVMT.queryAC(self, 1, v)
     end
-    for _, v in pairs(trackedAnimations[self]) do
+
+    table.insert(AnimationTags[v], self)
+  end
+
+  return self
+end
+
+---Removes tags from this animation
+---@param ... string
+---@return self
+function Animation:removeTags(...)
+  for _, v in pairs({ ... }) do
+    if self:isPlaying() then
+      _ENVMT.queryAC(self, -1, v)
+    end
+
+    trackedAnimations[self][v] = nil
+    if AnimationTags[v] then
       local meta = getmetatable(AnimationTags[v])
       meta.index[self] = nil
       AnimationTags[v] = setmetatable(reflect(meta.index), meta)
     end
-  end
-
-  -- Add to new tags
-
-  local tags = { ... }
-  trackedAnimations[self] = tags
-
-  for _, v in pairs(tags) do
-    local meta = { __index = AnimationTag, playing = {}, isPlaying = false, count = 0, index = {} }
-    AnimationTags[v] = AnimationTags[v] or setmetatable({}, meta)
-    meta.index[self] = self
-    if self:isPlaying() then
-      _ENVMT.queryAC(self, 1)
-    end
-    table.insert(AnimationTags[v], self)
   end
 
   return self
