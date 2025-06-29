@@ -81,12 +81,13 @@ end
 ---@param inc number
 ---@param tag? string
 function _ENVMT.queryAC(anim, inc, tag)
-  local meta = getmetatable(AnimationTags[tag])
   if tag then
+    local meta = getmetatable(AnimationTags[tag])
     query(meta, anim, inc)
   else
     if not trackedAnimations[anim] then return end
     for _, v in pairs(trackedAnimations[anim]) do
+      local meta = getmetatable(AnimationTags[v])
       query(meta, anim, inc)
     end
   end
