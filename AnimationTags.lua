@@ -3,7 +3,7 @@ ____  ___ __   __
 | __|/ _ \\ \ / /
 | _|| (_) |> w <
 |_|  \___//_/ \_\
-FOX's Animation Tags API v1.0.0-rc2
+FOX's Animation Tags API v1.0.0-rc3
 
 Github: https://github.com/Bitslayn/AnimationTags
 Wiki: https://github.com/Bitslayn/AnimationTags/wiki
@@ -28,6 +28,7 @@ function ani:__index(key) return Animation[key] or ani_i(self, key) end
 
 local _ENVMT = getmetatable(_ENV) or getmetatable(setmetatable(_ENV, {}))
 
+---@param tbl table
 local function reflect(tbl)
   local i, t = 0, {}
   for k in pairs(tbl) do
@@ -65,9 +66,11 @@ function AnimationTag:getPlaying()
   return reflect(getmetatable(self).playing)
 end
 
-local function query(tag, inc)
-  local meta = getmetatable(AnimationTags[tag])
-  meta.playing[tag] = inc == 1 and true or nil
+---@param meta AnimationTag.Meta
+---@param anim Animation
+---@param inc number
+local function query(meta, anim, inc)
+  meta.playing[anim] = inc == 1 and true or nil
   meta.count = meta.count + inc
   meta.isPlaying = meta.count > 0
   assert(meta.count >= 0, "INTERNAL LOGIC ERROR\nReport this to FOX")
@@ -78,12 +81,13 @@ end
 ---@param inc number
 ---@param tag? string
 function _ENVMT.queryAC(anim, inc, tag)
+  local meta = getmetatable(AnimationTags[tag])
   if tag then
-    query(tag, inc)
+    query(meta, anim, inc)
   else
     if not trackedAnimations[anim] then return end
     for _, v in pairs(trackedAnimations[anim]) do
-      query(v, inc)
+      query(meta, anim, inc)
     end
   end
   anim:code(
@@ -116,6 +120,12 @@ function Animation:addTags(...)
     trackedAnimations[self] = trackedAnimations[self] or {}
     trackedAnimations[self][v] = v
 
+    ---@class AnimationTag.Meta
+    ---@field __index AnimationTag Stores all AnimationTag methods
+    ---@field playing table<Animation, true> Stores animations currently playing
+    ---@field isPlaying boolean If there's an animation with this tag currently playing
+    ---@field count number The number of playing animations
+    ---@field index table<Animation, Animation> Stores all animations associated with this tag
     local meta = { __index = AnimationTag, playing = {}, isPlaying = false, count = 0, index = {} }
     AnimationTags[v] = AnimationTags[v] or setmetatable({}, meta)
     meta.index[self] = self
