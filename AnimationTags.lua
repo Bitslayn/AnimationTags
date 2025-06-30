@@ -3,21 +3,23 @@ ____  ___ __   __
 | __|/ _ \\ \ / /
 | _|| (_) |> w <
 |_|  \___//_/ \_\
-FOX's Animation Tags API v1.0.0-rc3
+FOX's Animation Tags API v1.0.0
 
 Github: https://github.com/Bitslayn/AnimationTags
 Wiki: https://github.com/Bitslayn/AnimationTags/wiki
 --]]
 
-for _, v in pairs(listFiles(nil, true)) do
-  if v:find("GSAnimBlend") then
-    require(v)
-  end
-end
-
 local debug = nil
 
 --#REGION ˚♡ Inject ♡˚
+
+---@diagnostic disable: undefined-field, redundant-parameter
+local _GSAnimBlend
+for _, v in pairs(listFiles(nil, true)) do
+  if v:find("GSAnimBlend") then
+    _GSAnimBlend = require(v)
+  end
+end
 
 ---@class AnimationAPI
 local AnimationAPI = {}
@@ -74,6 +76,9 @@ function AnimationTag:getPlaying()
   return reflect(getmetatable(self).playing)
 end
 
+---Incriments each the tag of this animation by the given amount
+---
+---Also sets the animation's playing state for that tag
 ---@param tag string
 ---@param anim Animation
 ---@param inc number
@@ -89,11 +94,11 @@ local function query(tag, anim, inc)
   end
 end
 
----Incriments each tag in the table by the given amount
+---Entrypoint to animation query
 ---@param anim Animation
 ---@param inc number
 ---@param tag? string
-function _ENVMT.queryAT(anim, inc, tag)
+function _ENVMT.manageAnim(anim, inc, tag)
   if tag then
     query(tag, anim, inc)
   else
@@ -102,9 +107,16 @@ function _ENVMT.queryAT(anim, inc, tag)
       query(v, anim, inc)
     end
   end
+  if _GSAnimBlend then
+    anim:setOnBlend(function(state)
+      if state.done and not state.starting then
+        _ENVMT.manageAnim(state.anim, -1)
+      end
+    end, 1)
+  end
   anim:code(
     anim:getLength() - 0.01,
-    anim:getLoop() == "ONCE" and "getmetatable(_ENV).queryAT(..., -1)" or ""
+    anim:getLoop() ~= "LOOP" and "getmetatable(_ENV).manageAnim(..., -1)" or "" -- An animation that is stopped on last frame is no longer playing
   )
 end
 
@@ -141,7 +153,7 @@ function Animation:addTags(...)
     meta.index[self] = self
 
     if self:isPlaying() then
-      _ENVMT.queryAT(self, 1, v)
+      _ENVMT.manageAnim(self, 1, v)
     end
 
     table.insert(AnimationTags[v], self)
@@ -156,7 +168,7 @@ end
 function Animation:removeTags(...)
   for _, v in pairs({ ... }) do
     if self:isPlaying() then
-      _ENVMT.queryAT(self, -1, v)
+      _ENVMT.manageAnim(self, -1, v)
     end
 
     trackedAnimations[self][v] = nil
@@ -185,7 +197,7 @@ for _, v in pairs({ "play", "playing", "setPlaying", "pause", "stop", "restart" 
 
     if wasPlaying == isPlaying then return self end
 
-    _ENVMT.queryAT(self, isPlaying and 1 or -1)
+    _ENVMT.manageAnim(self, isPlaying and 1 or -1)
     return self
   end
   ---@param self AnimationTag
